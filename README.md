@@ -77,7 +77,7 @@ python main.py --dataset realsense --config config/base.yaml
 Our system can process either MP4 videos or folders containing RGB images.
 ```
 python main.py --dataset <path/to/video>.mp4 --config config/base.yaml
-python main.py --dataset <path/to/folder>--config config/base.yaml
+python main.py --dataset <path/to/folder> --config config/base.yaml
 ```
 
 ## Downloading Dataset

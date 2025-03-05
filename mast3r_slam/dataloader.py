@@ -206,7 +206,8 @@ class Webcam(MonocularDataset):
         if not ret:
             raise ValueError("Failed to read image")
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        self.timestamps.append(idx / 30)
+        # self.timestamps.append(idx / 30)
+        self.timestamps.append(idx / 5)
 
         return img
 
@@ -243,7 +244,8 @@ class RGBFiles(MonocularDataset):
 
         self.dataset_path = pathlib.Path(dataset_path)
         self.rgb_files = natsorted(list((self.dataset_path).glob("*.png")))
-        self.timestamps = np.arange(0, len(self.rgb_files)).astype(self.dtype) / 30.0
+        #self.timestamps = np.arange(0, len(self.rgb_files)).astype(self.dtype) / 30.0
+        self.timestamps = np.arange(0, len(self.rgb_files)).astype(self.dtype) / 5.0
 
 
 class Intrinsics:

@@ -291,7 +291,8 @@ if __name__ == "__main__":
                 time.sleep(0.01)
 
         # log time
-        if i % 30 == 0:
+        # if i % 30 == 0:
+        if i % 5 == 0:
             FPS = i / (time.time() - fps_timer)
             print(f"FPS: {FPS}")
         i += 1

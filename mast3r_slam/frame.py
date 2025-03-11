@@ -39,17 +39,20 @@ class Frame:
         return score
 
     def update_pointmap(self, X: torch.Tensor, C: torch.Tensor):
+        # 获取配置中的过滤模式
         filtering_mode = config["tracking"]["filtering_mode"]
 
+        # 如果这是第一次更新点云地图
         if self.N == 0:
-            self.X_canon = X.clone()
-            self.C = C.clone()
-            self.N = 1
-            self.N_updates = 1
+            self.X_canon = X.clone()  # 克隆输入的点云
+            self.C = C.clone()  # 克隆输入的置信度
+            self.N = 1  # 设置点云数量为1
+            self.N_updates = 1  # 设置更新次数为1
             if filtering_mode == "best_score":
-                self.score = self.get_score(C)
+                self.score = self.get_score(C)  # 计算并存储当前置信度的得分
             return
 
+        # 根据不同的过滤模式更新点云地图
         if filtering_mode == "first":
             if self.N_updates == 1:
                 self.X_canon = X.clone()
@@ -78,6 +81,21 @@ class Frame:
         elif filtering_mode == "weighted_spherical":
 
             def cartesian_to_spherical(P):
+                """
+                将笛卡尔坐标转换为球面坐标。
+
+                参数:
+                    P (torch.Tensor): 输入的笛卡尔坐标张量，形状为 (..., 3)。
+
+                返回:
+                    torch.Tensor: 转换后的球面坐标张量，形状为 (..., 3)，
+                                  其中包含径向距离 r、方位角 phi 和极角 theta。
+
+                注意:
+                    - r 是径向距离，表示点到原点的距离。
+                    - phi 是方位角，表示点在 xy 平面上的投影与 x 轴的夹角。
+                    - theta 是极角，表示点与 z 轴的夹角。
+                """
                 r = torch.linalg.norm(P, dim=-1, keepdim=True)
                 x, y, z = torch.tensor_split(P, 3, dim=-1)
                 phi = torch.atan2(y, x)
@@ -86,6 +104,24 @@ class Frame:
                 return spherical
 
             def spherical_to_cartesian(spherical):
+                """
+                将球坐标转换为笛卡尔坐标。
+
+                参数:
+                spherical (torch.Tensor): 包含球坐标的张量，形状为 (..., 3)，
+                                          其中最后一个维度包含 (r, phi, theta)。
+                                          r 是半径，phi 是方位角，theta 是极角。
+
+                返回:
+                torch.Tensor: 包含笛卡尔坐标的张量，形状与输入相同，最后一个维度包含 (x, y, z)。
+
+                示例:
+                >>> spherical = torch.tensor([[1, 0, 0], [1, 3.14159, 1.5708]])
+                >>> cartesian = spherical_to_cartesian(spherical)
+                >>> print(cartesian)
+                tensor([[1.0000, 0.0000, 0.0000],
+                        [-1.0000, 0.0000, 0.0000]])
+                """
                 r, phi, theta = torch.tensor_split(spherical, 3, dim=-1)
                 x = r * torch.sin(theta) * torch.cos(phi)
                 y = r * torch.sin(theta) * torch.sin(phi)

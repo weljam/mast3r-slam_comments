@@ -117,6 +117,25 @@ def mast3r_decode_symmetric_batch(
 
 @torch.inference_mode
 def mast3r_inference_mono(model, frame):
+    """
+    对单目图像进行推理。
+
+    参数:
+    model (object): 用于推理的模型对象。
+    frame (object): 包含图像和特征的帧对象。
+
+    返回:
+    tuple: 包含重排后的三维点、置信度的元组。
+
+    详细说明:
+    1. 如果帧对象的特征为空，则通过模型的 `_encode_image` 方法对图像进行编码，获取特征、位置和真实形状。
+    2. 使用解码器 `decoder` 对特征进行解码，获取结果。
+    3. 从结果中提取三维点、置信度、描述符和描述符置信度，并将它们堆叠成张量。
+    4. 对堆叠后的张量进行下采样。
+    5. 将下采样后的三维点和置信度重排为指定的形状。
+
+    返回的三维点和置信度可以用于后续的处理和分析。
+    """
     if frame.feat is None:
         frame.feat, frame.pos, _ = model._encode_image(frame.img, frame.img_true_shape)
 
@@ -182,6 +201,24 @@ def mast3r_match_symmetric(model, feat_i, pos_i, feat_j, pos_j, shape_i, shape_j
 
 @torch.inference_mode
 def mast3r_asymmetric_inference(model, frame_i, frame_j):
+    """
+    对非对称帧对进行推理。
+
+    参数:
+    model (object): 用于推理的模型对象。
+    frame_i (object): 包含图像和特征的第一个帧对象。
+    frame_j (object): 包含图像和特征的第二个帧对象。
+
+    返回:
+    tuple: 包含重排后的三维点、置信度、描述符和描述符置信度的元组。
+
+    详细说明:
+    1. 如果帧对象的特征为空，则通过模型的 `_encode_image` 方法对图像进行编码，获取特征、位置和真实形状。
+    2. 使用解码器 `decoder` 对特征进行解码，获取结果。
+    3. 从结果中提取三维点、置信度、描述符和描述符置信度，并将它们堆叠成张量。
+    4. 对堆叠后的张量进行下采样。
+    5. 返回下采样后的三维点、置信度、描述符和描述符置信度。
+    """
     if frame_i.feat is None:
         frame_i.feat, frame_i.pos, _ = model._encode_image(
             frame_i.img, frame_i.img_true_shape
@@ -207,12 +244,13 @@ def mast3r_asymmetric_inference(model, frame_i, frame_j):
 
 
 def mast3r_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
+    #获取点云图, 置信度, 描述符和描述符置信度
     X, C, D, Q = mast3r_asymmetric_inference(model, frame_i, frame_j)
 
     b, h, w = X.shape[:-1]
     # 2 outputs per inference
     b = b // 2
-
+    # 分别获得两帧的点云图,配合流程图看
     Xii, Xji = X[:b], X[b:]
     Cii, Cji = C[:b], C[b:]
     Dii, Dji = D[:b], D[b:]

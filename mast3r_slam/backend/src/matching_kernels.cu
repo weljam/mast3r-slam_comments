@@ -84,36 +84,37 @@ __global__ void refine_matches_kernel(
 
 
 std::vector<torch::Tensor> refine_matches_cuda(
-    torch::Tensor D11,
-    torch::Tensor D21,
-    torch::Tensor p1,
-    const int radius,
-    const int dilation)
-{
-  const auto batch_size = p1.size(0);
-  const auto n = p1.size(1);
+    torch::Tensor D11, // 第一张图像的特征张量
+    torch::Tensor D21, // 第二张图像的特征张量
+    torch::Tensor p1, // 第一张图像中的初始像素坐标
+    const int radius, // 搜索半径
+    const int dilation) // 膨胀系数
+  {
+    const auto batch_size = p1.size(0); // 批量大小
+    const auto n = p1.size(1); // 每批次的像素数量
 
-  const dim3 blocks((n + BLOCK - 1) / BLOCK, 
-                    batch_size);
-  
-  const dim3 threads(BLOCK);
+    // 定义块和线程的数量
+    const dim3 blocks((n + BLOCK - 1) / BLOCK, 
+            batch_size);
+    const dim3 threads(BLOCK);
 
-  auto opts = p1.options();
-  torch::Tensor p1_new = torch::zeros(
-    {batch_size, n, 2}, opts);
+    auto opts = p1.options(); // 获取p1张量的选项（如数据类型、设备等）
+    torch::Tensor p1_new = torch::zeros(
+    {batch_size, n, 2}, opts); // 创建新的像素坐标张量
 
-  AT_DISPATCH_FLOATING_TYPES_AND_HALF(D11.type(), "refine_matches_kernel", ([&] {
+    // 调用CUDA核函数，使用AT_DISPATCH_FLOATING_TYPES_AND_HALF宏来处理不同的数据类型
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(D11.type(), "refine_matches_kernel", ([&] {
     refine_matches_kernel<scalar_t><<<blocks, threads>>>(
-      D11.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(),
-      D21.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(),
-      p1.packed_accessor32<long,3,torch::RestrictPtrTraits>(),
-      p1_new.packed_accessor32<long,3,torch::RestrictPtrTraits>(),
-      radius,
-      dilation
+      D11.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>(), // 将D11张量转换为4维张量的访问器
+      D21.packed_accessor32<scalar_t,3,torch::RestrictPtrTraits>(), // 将D21张量转换为3维张量的访问器
+      p1.packed_accessor32<long,3,torch::RestrictPtrTraits>(), // 将p1张量转换为3维张量的访问器
+      p1_new.packed_accessor32<long,3,torch::RestrictPtrTraits>(), // 将p1_new张量转换为3维张量的访问器
+      radius, // 搜索半径
+      dilation // 膨胀系数
     );
-   }));
+    }));
 
-  return {p1_new};
+    return {p1_new}; // 返回新的像素坐标
 
 }
 

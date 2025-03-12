@@ -11,6 +11,16 @@ def match(X11, X21, D11, D21, idx_1_to_2_init=None):
 
 
 def pixel_to_lin(p1, w):
+    """
+    将像素坐标转换为线性索引。
+
+    参数:
+        p1 (numpy.ndarray): 具有形状(..., 2)的像素坐标数组。
+        w (int): 图像的宽度。
+
+    返回:
+        numpy.ndarray: 与输入像素坐标对应的线性索引数组。
+    """
     idx_1_to_2 = p1[..., 0] + (w * p1[..., 1])
     return idx_1_to_2
 

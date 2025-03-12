@@ -128,7 +128,7 @@ def mast3r_inference_mono(model, frame):
     tuple: 包含重排后的三维点、置信度的元组。
 
     详细说明:
-    1. 如果帧对象的特征为空，则通过模型的 `_encode_image` 方法对图像进行编码，获取特征、位置和真实形状。
+    1. 如果帧对象的特征为空，则通过模型的 `_encode_image` 方法对图像进行编码，获取特征
     2. 使用解码器 `decoder` 对特征进行解码，获取结果。
     3. 从结果中提取三维点、置信度、描述符和描述符置信度，并将它们堆叠成张量。
     4. 对堆叠后的张量进行下采样。
@@ -246,7 +246,10 @@ def mast3r_asymmetric_inference(model, frame_i, frame_j):
 def mast3r_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     #获取点云图, 置信度, 描述符和描述符置信度
     X, C, D, Q = mast3r_asymmetric_inference(model, frame_i, frame_j)
-
+    print(f"X: {X.shape}")
+    print(f"C: {C.shape}")
+    print(f"D: {D.shape}")
+    print(f"Q: {Q.shape}")
     b, h, w = X.shape[:-1]
     # 2 outputs per inference
     b = b // 2
@@ -256,15 +259,19 @@ def mast3r_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     Dii, Dji = D[:b], D[b:]
     Qii, Qji = Q[:b], Q[b:]
 
+    # 返回匹配上的像素一维索引,以及匹配的有效性
     idx_i2j, valid_match_j = matching.match(
         Xii, Xji, Dii, Dji, idx_1_to_2_init=idx_i2j_init
     )
+    print(f"idx_i2j: {idx_i2j.shape}")
 
     # How rest of system expects it
     Xii, Xji = einops.rearrange(X, "b h w c -> b (h w) c")
     Cii, Cji = einops.rearrange(C, "b h w -> b (h w) 1")
     Dii, Dji = einops.rearrange(D, "b h w c -> b (h w) c")
     Qii, Qji = einops.rearrange(Q, "b h w -> b (h w) 1")
+    print(f"Xii: {Xii.shape}")
+    print(f"Cii: {Cii.shape}")
 
     return idx_i2j, valid_match_j, Xii, Cii, Qii, Xji, Cji, Qji
 

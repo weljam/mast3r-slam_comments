@@ -26,23 +26,33 @@ class FrameTracker:
         self.idx_f2k = None
 
     def track(self, frame: Frame):
+        # 获取最新的关键帧
         keyframe = self.keyframes.last_keyframe()
 
+        # 进行不对称匹配，获取匹配像素一维索引、匹配置信度、匹配点云、匹配点云置信度、匹配描述符置信度
         idx_f2k, valid_match_k, Xff, Cff, Qff, Xkf, Ckf, Qkf = mast3r_match_asymmetric(
             self.model, frame, keyframe, idx_i2j_init=self.idx_f2k
         )
-        # Save idx for next
+        # 保存匹配像素点以供下次使用
         self.idx_f2k = idx_f2k.clone()
 
-        # Get rid of batch dim
+        # 去除维度
+        print(f'idx_f2k: {idx_f2k.shape}')
         idx_f2k = idx_f2k[0]
+        print(f'idx_f2k: {idx_f2k.shape}')
         valid_match_k = valid_match_k[0]
+        print(f'valid_match_k: {valid_match_k.shape}')
+        with open('/home/narwal/mast3r-slam/MASt3R-SLAM/match_output.txt', 'a') as f:
+            f.write(f'idx_f2k: {idx_f2k.shape}\n')
+            f.write(f'valid_match_k: {valid_match_k.shape}\n')
 
+        # 计算匹配上的点图对应的置信度,利用两个像素点的置信度乘积的平方根
         Qk = torch.sqrt(Qff[idx_f2k] * Qkf)
 
-        # Update keyframe pointmap after registration (need pose)
+        # 在注册后更新关键帧点云图
         frame.update_pointmap(Xff, Cff)
 
+        # 检查是否使用标定
         use_calib = config["use_calib"]
         img_size = frame.img.shape[-2:]
         if use_calib:
@@ -50,27 +60,30 @@ class FrameTracker:
         else:
             K = None
 
-        # Get poses and point correspondneces and confidences
+        # 获取位姿、点对应关系和置信度
         Xf, Xk, T_WCf, T_WCk, Cf, Ck, meas_k, valid_meas_k = self.get_points_poses(
             frame, keyframe, idx_f2k, img_size, use_calib, K
         )
 
-        # Get valid
-        # Use canonical confidence average
+        # 获取有效点
+        # 使用规范化置信度平均值
         valid_Cf = Cf > self.cfg["C_conf"]
         valid_Ck = Ck > self.cfg["C_conf"]
         valid_Q = Qk > self.cfg["Q_conf"]
 
+        # 判断匹配后的像素点是否有效
         valid_opt = valid_match_k & valid_Cf & valid_Ck & valid_Q
         valid_kf = valid_match_k & valid_Q
 
+        # 计算匹配比例
         match_frac = valid_opt.sum() / valid_opt.numel()
+        print(f"Match frac: {match_frac}")
         if match_frac < self.cfg["min_match_frac"]:
             print(f"Skipped frame {frame.frame_id}")
             return False, [], True
 
         try:
-            # Track
+            # 进行跟踪
             if not use_calib:
                 T_WCf, T_CkCf = self.opt_pose_ray_dist_sim3(
                     Xf, Xk, T_WCf, T_WCk, Qk, valid_opt
@@ -92,24 +105,26 @@ class FrameTracker:
             print(f"Cholesky failed {frame.frame_id}")
             return False, [], True
 
+        # 更新帧的位姿
         frame.T_WC = T_WCf
 
-        # Use pose to transform points to update keyframe
+        # 使用位姿变换点以更新关键帧
         Xkk = T_CkCf.act(Xkf)
         keyframe.update_pointmap(Xkk, Ckf)
-        # write back the fitered pointmap
+        # 写回过滤后的点云图
         self.keyframes[len(self.keyframes) - 1] = keyframe
 
-        # Keyframe selection
+        # 关键帧选择
         n_valid = valid_kf.sum()
         match_frac_k = n_valid / valid_kf.numel()
         unique_frac_f = (
             torch.unique(idx_f2k[valid_match_k[:, 0]]).shape[0] / valid_kf.numel()
         )
 
+        # 判断是否需要新的关键帧
         new_kf = min(match_frac_k, unique_frac_f) < self.cfg["match_frac_thresh"]
 
-        # Rest idx if new keyframe
+        # 如果是新关键帧，重置索引
         if new_kf:
             self.reset_idx_f2k()
 
@@ -171,29 +186,36 @@ class FrameTracker:
         return tau_j, cost
 
     def opt_pose_ray_dist_sim3(self, Xf, Xk, T_WCf, T_WCk, Qk, valid):
+        # 初始化最后的误差
         last_error = 0
+        # 计算光线和距离的置信度信息
         sqrt_info_ray = 1 / self.cfg["sigma_ray"] * valid * torch.sqrt(Qk)
         sqrt_info_dist = 1 / self.cfg["sigma_dist"] * valid * torch.sqrt(Qk)
         sqrt_info = torch.cat((sqrt_info_ray.repeat(1, 3), sqrt_info_dist), dim=1)
 
-        # Solving for relative pose without scale!
+        # 计算相对位姿（不包含尺度）
         T_CkCf = T_WCk.inv() * T_WCf
 
-        # Precalculate distance and ray for obs k
+        # 预计算关键帧观测点的距离和光线,得到归一化的向量
         rd_k = point_to_ray_dist(Xk, jacobian=False)
 
         old_cost = float("inf")
         for step in range(self.cfg["max_iters"]):
+            # 计算当前帧在关键帧坐标系下的点和雅可比矩阵
             Xf_Ck, dXf_Ck_dT_CkCf = act_Sim3(T_CkCf, Xf, jacobian=True)
+            # 计算光线距离和雅可比矩阵
             rd_f_Ck, drd_f_Ck_dXf_Ck = point_to_ray_dist(Xf_Ck, jacobian=True)
-            # r = z-h(x)
+            # 计算残差 r = z - h(x)
             r = rd_k - rd_f_Ck
-            # Jacobian
+            # 计算雅可比矩阵
             J = -drd_f_Ck_dXf_Ck @ dXf_Ck_dT_CkCf
 
+            # 求解更新量 tau_ij_sim3 和新的代价
             tau_ij_sim3, new_cost = self.solve(sqrt_info, r, J)
+            # 更新相对位姿
             T_CkCf = T_CkCf.retr(tau_ij_sim3)
 
+            # 检查是否收敛
             if check_convergence(
                 step,
                 self.cfg["rel_error"],
@@ -205,10 +227,11 @@ class FrameTracker:
                 break
             old_cost = new_cost
 
+            # 如果达到最大迭代次数，打印最后的误差
             if step == self.cfg["max_iters"] - 1:
                 print(f"max iters reached {last_error}")
 
-        # Assign new pose based on relative pose
+        # 根据相对位姿更新当前帧的位姿
         T_WCf = T_WCk * T_CkCf
 
         return T_WCf, T_CkCf

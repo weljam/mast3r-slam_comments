@@ -173,6 +173,7 @@ if __name__ == "__main__":
 
     # 加载数据集
     dataset = load_dataset(args.dataset)
+    print(f"Dataset: {dataset.shape}")
     dataset.subsample(config["dataset"]["subsample"])
 
     h, w = dataset.get_img_shape()[0]  # 获取图像高度和宽度

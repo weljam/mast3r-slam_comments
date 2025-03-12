@@ -16,48 +16,54 @@ from torchcodec.decoders import VideoDecoder
 class MonocularDataset(torch.utils.data.Dataset):
     def __init__(self, dtype=np.float32):
         self.dtype = dtype
-        self.rgb_files = []
-        self.timestamps = []
-        self.img_size = 512
-        self.camera_intrinsics = None
-        self.use_calibration = config["use_calib"]
-        self.save_results = True
+        self.rgb_files = []  # 存储RGB文件路径的列表
+        self.timestamps = []  # 存储时间戳的列表
+        self.img_size = 512  # 图像大小
+        self.camera_intrinsics = None  # 相机内参
+        self.use_calibration = config["use_calib"]  # 是否使用校准
+        self.save_results = True  # 是否保存结果
+        self.image_names = []  # 存储图像名字的列表
 
     def __len__(self):
-        return len(self.rgb_files)
+        return len(self.rgb_files)  # 返回RGB文件的数量
 
     def __getitem__(self, idx):
-        # Call get_image before timestamp for realsense camera
+        # 在获取时间戳之前调用get_image
         img = self.get_image(idx)
         timestamp = self.get_timestamp(idx)
-        return timestamp, img
+        image_name = self.get_image_name(idx)
+        return timestamp, img, image_name  # 返回时间戳、图像和图像名字
 
     def get_timestamp(self, idx):
-        return self.timestamps[idx]
+        return self.timestamps[idx]  # 返回指定索引的时间戳
 
     def read_img(self, idx):
-        img = cv2.imread(self.rgb_files[idx])
-        return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.imread(self.rgb_files[idx])  # 读取图像
+        return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # 转换颜色空间
 
     def get_image(self, idx):
-        img = self.read_img(idx)
+        img = self.read_img(idx)  # 读取图像
         if self.use_calibration:
-            img = self.camera_intrinsics.remap(img)
-        return img.astype(self.dtype) / 255.0
+            img = self.camera_intrinsics.remap(img)  # 如果使用校准，进行重映射
+        return img.astype(self.dtype) / 255.0  # 返回归一化后的图像
 
     def get_img_shape(self):
-        img = self.read_img(0)
-        raw_img_shape = img.shape
-        img = resize_img(img, self.img_size)
+        img = self.read_img(0)  # 读取第一张图像
+        raw_img_shape = img.shape  # 获取原始图像形状
+        img = resize_img(img, self.img_size)  # 调整图像大小
         # 3XHxW, HxWx3 -> HxW, HxW
-        return img["img"][0].shape[1:], raw_img_shape[:2]
+        return img["img"][0].shape[1:], raw_img_shape[:2]  # 返回调整后的图像形状和原始图像形状
 
     def subsample(self, subsample):
-        self.rgb_files = self.rgb_files[::subsample]
-        self.timestamps = self.timestamps[::subsample]
+        self.rgb_files = self.rgb_files[::subsample]  # 对RGB文件进行下采样
+        self.timestamps = self.timestamps[::subsample]  # 对时间戳进行下采样
+        self.image_names = self.image_names[::subsample]  # 对图像名字进行下采样
 
     def has_calib(self):
-        return self.camera_intrinsics is not None
+        return self.camera_intrinsics is not None  # 判断是否有相机内参
+
+    def get_image_name(self, idx):
+        return self.rgb_files[idx].name  # 返回指定索引的图像名字
 
 
 class TUMDataset(MonocularDataset):

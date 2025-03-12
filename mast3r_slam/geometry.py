@@ -15,15 +15,18 @@ def point_to_dist(X):
 
 # 计算点到射线的距离
 def point_to_ray_dist(X, jacobian=False):
+    # 获取输入张量的形状
     b = X.shape[:-1]
 
+    # 计算点到原点的距离
     d = point_to_dist(X)
     d_inv = 1.0 / d
-    r = d_inv * X
+    r = d_inv * X #归一化
     rd = torch.cat((r, d), dim=-1)  # 维度4
     if not jacobian:
         return rd
     else:
+        # 计算雅可比矩阵 r关于x的雅可比矩阵dr/dx = 1/d(I-xx^T/d^2) dd/dx = r
         d_inv_2 = d_inv**2
         I = torch.eye(3, device=X.device, dtype=X.dtype).repeat(*b, 1, 1)
         dr_dX = d_inv.unsqueeze(-1) * (
@@ -43,9 +46,11 @@ def constrain_points_to_ray(img_size, Xs, K):
 
 # Sim3变换作用于点
 def act_Sim3(X: lietorch.Sim3, pC: torch.Tensor, jacobian=False):
+    # Sim3变换作用于点 pW = sR*pC+t
     pW = X.act(pC)
     if not jacobian:
         return pW
+    # 计算雅可比矩阵  dpW/dX = [dpW/dt, dpW/dR, dpW/ds] = [0,]
     dpC_dt = torch.eye(3, device=pW.device).repeat(*pW.shape[:-1], 1, 1)
     dpC_dR = -skew_sym(pW)
     dpc_ds = pW.reshape(*pW.shape[:-1], -1, 1)

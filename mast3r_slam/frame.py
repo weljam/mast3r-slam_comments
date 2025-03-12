@@ -164,33 +164,34 @@ class SharedStates:
         self.dtype = dtype
         self.device = device
 
-        self.lock = manager.RLock()
-        self.paused = manager.Value("i", 0)
-        self.mode = manager.Value("i", Mode.INIT)
-        self.reloc_sem = manager.Value("i", 0)
-        self.global_optimizer_tasks = manager.list()
-        self.edges_ii = manager.list()
-        self.edges_jj = manager.list()
+        self.lock = manager.RLock()  # 线程锁，用于同步访问
+        self.paused = manager.Value("i", 0)  # 用于表示是否暂停的标志
+        self.mode = manager.Value("i", Mode.INIT)  # 当前模式
+        self.reloc_sem = manager.Value("i", 0)  # 重定位信号量
+        self.global_optimizer_tasks = manager.list()  # 全局优化任务队列
+        self.edges_ii = manager.list()  # 边的起点索引列表
+        self.edges_jj = manager.list()  # 边的终点索引列表
 
-        self.feat_dim = 1024
-        self.num_patches = h * w // (16 * 16)
+        self.feat_dim = 1024  # 特征维度
+        self.num_patches = h * w // (16 * 16)  # 图像块数量
 
         # fmt:off
-        # shared state for the current frame (used for reloc/visualization)
-        self.dataset_idx = torch.zeros(1, device=device, dtype=torch.int).share_memory_()
-        self.img = torch.zeros(3, h, w, device=device, dtype=dtype).share_memory_()
-        self.uimg = torch.zeros(h, w, 3, device="cpu", dtype=dtype).share_memory_()
-        self.img_shape = torch.zeros(1, 2, device=device, dtype=torch.int).share_memory_()
-        self.img_true_shape = torch.zeros(1, 2, device=device, dtype=torch.int).share_memory_()
-        self.T_WC = lietorch.Sim3.Identity(1, device=device, dtype=dtype).data.share_memory_()
-        self.X = torch.zeros(h * w, 3, device=device, dtype=dtype).share_memory_()
-        self.C = torch.zeros(h * w, 1, device=device, dtype=dtype).share_memory_()
-        self.feat = torch.zeros(1, self.num_patches, self.feat_dim, device=device, dtype=dtype).share_memory_()
-        self.pos = torch.zeros(1, self.num_patches, 2, device=device, dtype=torch.long).share_memory_()
+        # 当前帧的共享状态（用于重定位/可视化）
+        self.dataset_idx = torch.zeros(1, device=device, dtype=torch.int).share_memory_()  # 数据集索引
+        self.img = torch.zeros(3, h, w, device=device, dtype=dtype).share_memory_()  # 图像
+        self.uimg = torch.zeros(h, w, 3, device="cpu", dtype=dtype).share_memory_()  # 未归一化的图像
+        self.img_shape = torch.zeros(1, 2, device=device, dtype=torch.int).share_memory_()  # 图像形状
+        self.img_true_shape = torch.zeros(1, 2, device=device, dtype=torch.int).share_memory_()  # 图像真实形状
+        self.T_WC = lietorch.Sim3.Identity(1, device=device, dtype=dtype).data.share_memory_()  # 世界到相机的变换矩阵
+        self.X = torch.zeros(h * w, 3, device=device, dtype=dtype).share_memory_()  # 点云
+        self.C = torch.zeros(h * w, 1, device=device, dtype=dtype).share_memory_()  # 置信度
+        self.feat = torch.zeros(1, self.num_patches, self.feat_dim, device=device, dtype=dtype).share_memory_()  # 特征
+        self.pos = torch.zeros(1, self.num_patches, 2, device=device, dtype=torch.long).share_memory_()  # 位置
         # fmt: on
 
     def set_frame(self, frame):
         with self.lock:
+            # 设置当前帧的共享状态
             self.dataset_idx[:] = frame.frame_id
             self.img[:] = frame.img
             self.uimg[:] = frame.uimg
@@ -204,6 +205,7 @@ class SharedStates:
 
     def get_frame(self):
         with self.lock:
+            # 获取当前帧的共享状态
             frame = Frame(
                 int(self.dataset_idx[0]),
                 self.img,
@@ -220,72 +222,81 @@ class SharedStates:
 
     def queue_global_optimization(self, idx):
         with self.lock:
+            # 将索引添加到全局优化任务队列
             self.global_optimizer_tasks.append(idx)
 
     def queue_reloc(self):
         with self.lock:
+            # 增加重定位信号量
             self.reloc_sem.value += 1
 
     def dequeue_reloc(self):
         with self.lock:
+            # 减少重定位信号量
             if self.reloc_sem.value == 0:
                 return
             self.reloc_sem.value -= 1
 
     def get_mode(self):
         with self.lock:
+            # 获取当前模式
             return self.mode.value
 
     def set_mode(self, mode):
         with self.lock:
+            # 设置当前模式
             self.mode.value = mode
 
     def pause(self):
         with self.lock:
+            # 暂停
             self.paused.value = 1
 
     def unpause(self):
         with self.lock:
+            # 取消暂停
             self.paused.value = 0
 
     def is_paused(self):
         with self.lock:
+            # 检查是否暂停
             return self.paused.value == 1
 
 
 class SharedKeyframes:
     def __init__(self, manager, h, w, buffer=512, dtype=torch.float32, device="cuda"):
-        self.lock = manager.RLock()
-        self.n_size = manager.Value("i", 0)
+        self.lock = manager.RLock()  # 线程锁，用于同步访问
+        self.n_size = manager.Value("i", 0)  # 关键帧数量
 
         self.h, self.w = h, w
         self.buffer = buffer
         self.dtype = dtype
         self.device = device
 
-        self.feat_dim = 1024
-        self.num_patches = h * w // (16 * 16)
+        self.feat_dim = 1024  # 特征维度
+        self.num_patches = h * w // (16 * 16)  # 图像块数量
 
         # fmt:off
-        self.dataset_idx = torch.zeros(buffer, device=device, dtype=torch.int).share_memory_()
-        self.img = torch.zeros(buffer, 3, h, w, device=device, dtype=dtype).share_memory_()
-        self.uimg = torch.zeros(buffer, h, w, 3, device="cpu", dtype=dtype).share_memory_()
-        self.img_shape = torch.zeros(buffer, 1, 2, device=device, dtype=torch.int).share_memory_()
-        self.img_true_shape = torch.zeros(buffer, 1, 2, device=device, dtype=torch.int).share_memory_()
-        self.T_WC = torch.zeros(buffer, 1, lietorch.Sim3.embedded_dim, device=device, dtype=dtype).share_memory_()
-        self.X = torch.zeros(buffer, h * w, 3, device=device, dtype=dtype).share_memory_()
-        self.C = torch.zeros(buffer, h * w, 1, device=device, dtype=dtype).share_memory_()
-        self.N = torch.zeros(buffer, device=device, dtype=torch.int).share_memory_()
-        self.N_updates = torch.zeros(buffer, device=device, dtype=torch.int).share_memory_()
-        self.feat = torch.zeros(buffer, 1, self.num_patches, self.feat_dim, device=device, dtype=dtype).share_memory_()
-        self.pos = torch.zeros(buffer, 1, self.num_patches, 2, device=device, dtype=torch.long).share_memory_()
-        self.is_dirty = torch.zeros(buffer, 1, device=device, dtype=torch.bool).share_memory_()
-        self.K = torch.zeros(3, 3, device=device, dtype=dtype).share_memory_()
+        # 初始化共享内存
+        self.dataset_idx = torch.zeros(buffer, device=device, dtype=torch.int).share_memory_()  # 数据集索引
+        self.img = torch.zeros(buffer, 3, h, w, device=device, dtype=dtype).share_memory_()  # 图像
+        self.uimg = torch.zeros(buffer, h, w, 3, device="cpu", dtype=dtype).share_memory_()  # 未归一化的图像
+        self.img_shape = torch.zeros(buffer, 1, 2, device=device, dtype=torch.int).share_memory_()  # 图像形状
+        self.img_true_shape = torch.zeros(buffer, 1, 2, device=device, dtype=torch.int).share_memory_()  # 图像真实形状
+        self.T_WC = torch.zeros(buffer, 1, lietorch.Sim3.embedded_dim, device=device, dtype=dtype).share_memory_()  # 世界到相机的变换矩阵
+        self.X = torch.zeros(buffer, h * w, 3, device=device, dtype=dtype).share_memory_()  # 点云
+        self.C = torch.zeros(buffer, h * w, 1, device=device, dtype=dtype).share_memory_()  # 置信度
+        self.N = torch.zeros(buffer, device=device, dtype=torch.int).share_memory_()  # 点云数量
+        self.N_updates = torch.zeros(buffer, device=device, dtype=torch.int).share_memory_()  # 更新次数
+        self.feat = torch.zeros(buffer, 1, self.num_patches, self.feat_dim, device=device, dtype=dtype).share_memory_()  # 特征
+        self.pos = torch.zeros(buffer, 1, self.num_patches, 2, device=device, dtype=torch.long).share_memory_()  # 位置
+        self.is_dirty = torch.zeros(buffer, 1, device=device, dtype=torch.bool).share_memory_()  # 脏标记
+        self.K = torch.zeros(3, 3, device=device, dtype=dtype).share_memory_()  # 内参矩阵
         # fmt: on
 
     def __getitem__(self, idx) -> Frame:
         with self.lock:
-            # put all of the data into a frame
+            # 将所有数据放入一个帧中
             kf = Frame(
                 int(self.dataset_idx[idx]),
                 self.img[idx],
@@ -308,7 +319,7 @@ class SharedKeyframes:
         with self.lock:
             self.n_size.value = max(idx + 1, self.n_size.value)
 
-            # set the attributes
+            # 设置属性
             self.dataset_idx[idx] = value.frame_id
             self.img[idx] = value.img
             self.uimg[idx] = value.uimg

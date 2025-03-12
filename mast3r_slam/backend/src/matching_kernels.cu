@@ -24,47 +24,49 @@ __forceinline__ __device__ void clamp(float& x, const float min, const float max
   x = fmin(fmax(x, min), max);
 }
 
+// 模板函数，用于在CUDA核函数中处理不同的数据类型
 template <typename scalar_t>
 __global__ void refine_matches_kernel(
-    const torch::PackedTensorAccessor32<scalar_t,4,torch::RestrictPtrTraits> D11,
-    const torch::PackedTensorAccessor32<scalar_t,3,torch::RestrictPtrTraits> D21,
-    const torch::PackedTensorAccessor32<long,3,torch::RestrictPtrTraits> p1,
-    torch::PackedTensorAccessor32<long,3,torch::RestrictPtrTraits> p1_new,
-    const int radius,
-    const int dilation_max
-    )
+  const torch::PackedTensorAccessor32<scalar_t,4,torch::RestrictPtrTraits> D11, // 第一张图像的特征张量
+  const torch::PackedTensorAccessor32<scalar_t,3,torch::RestrictPtrTraits> D21, // 第二张图像的特征张量
+  const torch::PackedTensorAccessor32<long,3,torch::RestrictPtrTraits> p1, // 第一张图像中的初始像素坐标
+  torch::PackedTensorAccessor32<long,3,torch::RestrictPtrTraits> p1_new, // 第一张图像中的新像素坐标
+  const int radius, // 搜索半径
+  const int dilation_max // 最大膨胀系数
+  )
 {
-  // batch index
+  // 获取线程索引，利用批次索引和线程索引计算全局索引
   const uint64_t n = blockIdx.x * blockDim.x + threadIdx.x;
   const uint64_t b = blockIdx.y;
 
-  const int h = D11.size(1);
-  const int w = D11.size(2);
-  const int fdim = D11.size(3);
+  const int h = D11.size(1); // 图像高度
+  const int w = D11.size(2); // 图像宽度
+  const int fdim = D11.size(3); // 特征维度
 
-  // Get pixel and its features
+  // 获取像素及其特征
   long u0 = p1[b][n][0];
   long v0 = p1[b][n][1];
 
-  scalar_t max_score = ::cuda::std::numeric_limits<scalar_t>::min();
-  long u_new = u0;
-  long v_new = v0;
+  scalar_t max_score = ::cuda::std::numeric_limits<scalar_t>::min(); // 初始化最大得分
+  long u_new = u0; // 初始化新像素坐标
+  long v_new = v0; // 初始化新像素坐标
 
+  // 逐步减小膨胀系数进行搜索
   for (int d=dilation_max; d>0; d--) {
-    const int rd = radius*d;
-    const int diam = 2*rd + 1;
+    const int rd = radius*d; // 计算当前膨胀半径
+    const int diam = 2*rd + 1; // 计算当前搜索直径
     for (int i=0; i<diam; i+=d) {
       for (int j=0; j<diam; j+=d) {
-        const long u = u0 - rd + i;
-        const long v = v0 - rd + j;
+        const long u = u0 - rd + i; // 计算当前搜索像素的横坐标
+        const long v = v0 - rd + j; // 计算当前搜索像素的纵坐标
 
-        if (inside_image(u, v, w, h)) {
-          scalar_t score = 0.0;
+        if (inside_image(u, v, w, h)) { // 判断像素是否在图像范围内
+          scalar_t score = 0.0; // 初始化得分
           for (int k=0; k<fdim; k++) {
-            score += D21[b][n][k] * D11[b][v][u][k];
+            score += D21[b][n][k] * D11[b][v][u][k]; // 计算特征匹配得分
           }
 
-          if (score > max_score) {
+          if (score > max_score) { // 更新最大得分和对应的像素坐标
             max_score = score;
             u_new = u;
             v_new = v;
@@ -73,11 +75,12 @@ __global__ void refine_matches_kernel(
         }
       }
     }
-    // Update where search is centered from previous update
+    // 更新搜索中心
     u0 = u_new;
     v0 = v_new;
   }
 
+  // 保存新像素坐标
   p1_new[b][n][0] = u_new;
   p1_new[b][n][1] = v_new;
 }

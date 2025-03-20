@@ -1139,7 +1139,7 @@ __global__ void ray_align_kernel(
 /**
  * @brief 高斯-牛顿优化算法，用于优化相机位姿和点云数据
  * 
- * @param Twc 相机位姿张量，形状为 (num_poses, 7)，表示在世界坐标系下的相机位姿（Sim3变换，7DoF）
+ * @param Twc 相机位姿张量，这里已经去重了,形状为 (num_poses, 7)，表示在世界坐标系下的相机位姿（Sim3变换，7DoF）
  * @param Xs 点云张量，形状为 (num_poses, n, 3)，n 是点的数量，每个点表示在相机坐标系下的三维坐标
  * @param Cs 点云置信度张量，形状为 (num_poses, n, 1)
  * @param ii 边的索引张量，形状为 (num_edges)，表示连接两个关键帧的边的起始关键帧索引
@@ -1175,7 +1175,7 @@ std::vector<torch::Tensor> gauss_newton_rays_cuda(
   const int num_poses = Xs.size(0);
   //每个位姿下点的数量
   const int n = Xs.size(1);
-
+  //固定的位姿态数量
   const int num_fix = 1;
 
   // 设置索引

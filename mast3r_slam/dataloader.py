@@ -18,7 +18,7 @@ class MonocularDataset(torch.utils.data.Dataset):
         self.dtype = dtype
         self.rgb_files = []  # 存储RGB文件路径的列表
         self.timestamps = []  # 存储时间戳的列表
-        self.img_size = 224  # 图像大小512,可以降低为224,减小显存,但是会影响精度
+        self.img_size = 512  # 图像大小512,可以降低为224,减小显存,但是会影响精度
         self.camera_intrinsics = None  # 相机内参
         self.use_calibration = config["use_calib"]  # 是否使用校准
         self.save_results = True  # 是否保存结果

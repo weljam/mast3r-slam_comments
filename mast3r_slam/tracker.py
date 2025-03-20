@@ -103,8 +103,8 @@ class FrameTracker:
                 T_WCf, T_CkCf = self.opt_pose_ray_dist_sim3(
                     Xf, Xk, T_WCf, T_WCk, Qk, valid_opt
                 )
-                print(f'T_WCf: {T_WCf.shape}')
-                print(f'T_CkCf: {T_CkCf.shape}')
+                # print(f'T_WCf: {T_WCf.shape}')
+                # print(f'T_CkCf: {T_CkCf.shape}')
             else:
                 T_WCf, T_CkCf = self.opt_pose_calib_sim3(
                     Xf,
@@ -221,10 +221,10 @@ class FrameTracker:
         # 使用Cholesky分解求解线性系统
         L = torch.linalg.cholesky(H, upper=False) # H = L*L^T
         tau_j = torch.cholesky_solve(g, L, upper=False).view(1, -1) # 求解更新量(1,7)
-        print(f'g: {g.shape}')
-        print(f'H: {H.shape}')
-        print(f'L: {L.shape}')
-        print(f'tau_j: {tau_j.shape}')
+        # print(f'g: {g.shape}')
+        # print(f'H: {H.shape}')
+        # print(f'L: {L.shape}')
+        # print(f'tau_j: {tau_j.shape}')
 
         return tau_j, cost
 

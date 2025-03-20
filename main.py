@@ -37,7 +37,7 @@ def relocalization(frame, keyframes, factor_graph, retrieval_database):
             k=config["retrieval"]["k"],
             min_thresh=config["retrieval"]["min_thresh"],
         )
-        print("Retrieved: ", retrieval_inds)
+        # print("Retrieved: ", retrieval_inds)
         kf_idx += retrieval_inds # 添加索引到的关键帧
         successful_loop_closure = False
         if kf_idx:
@@ -45,8 +45,8 @@ def relocalization(frame, keyframes, factor_graph, retrieval_database):
             n_kf = len(keyframes)  # 获取关键帧数量,即当前帧索引+1
             kf_idx = list(kf_idx)  # 转换为列表,主要是获取索引图像的数量,代码yaml中设置为3 
             frame_idx = [n_kf - 1] * len(kf_idx)  # 创建当前帧索引列表,若当前帧率为27,则[27 27 27]
-            print("Adding  kf ", n_kf - 1)
-            print("Adding factors against kf ", frame_idx.shape)
+            # print("Adding  kf ", n_kf - 1)
+            # print("Adding factors against kf ", frame_idx.shape)
             print("RELOCALIZING against kf ", n_kf - 1, " and ", kf_idx)
             # 添加新边，如果成功则进行后续操作
             if factor_graph.add_factors(
@@ -199,7 +199,7 @@ if __name__ == "__main__":
             intrinsics["height"],
             intrinsics["calibration"],
         )
-    keyframes = SharedKeyframes(manager, h, w ,64)  # 共享关键帧,这里的关键帧可以减少,进而减少显存
+    keyframes = SharedKeyframes(manager, h, w ,168)  # 共享关键帧,这里的关键帧可以减少,进而减少显存
     states = SharedStates(manager, h, w)  # 共享状态
 
     # 如果不禁用可视化，启动可视化进程
@@ -270,7 +270,7 @@ if __name__ == "__main__":
             states.set_mode(Mode.TERMINATED)
             break
 
-        timestamp, img = dataset[i]  # 获取时间戳和归一化图像
+        timestamp, img ,_= dataset[i]  # 获取时间戳和归一化图像
         frames.append(img)
 
         # 获取上一帧的相机位姿

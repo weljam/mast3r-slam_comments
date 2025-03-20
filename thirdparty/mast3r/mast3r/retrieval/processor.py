@@ -67,7 +67,7 @@ class Retriever(object):
         # 加载模型
         assert os.path.isfile(modelname), modelname  # 确认模型文件存在
         print(f'Loading retrieval model from {modelname}')  # 打印加载模型信息
-        ckpt = torch.load(modelname, 'cpu')  # 从文件中加载模型检查点
+        ckpt = torch.load(modelname, 'cpu')  
         ckpt_args = ckpt['args']  # 获取检查点中的参数
         if backbone is None:
             backbone = AsymmetricMASt3R.from_pretrained(ckpt_args.pretrained)  # 如果没有提供backbone，则从预训练模型中加载

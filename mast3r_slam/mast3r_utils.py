@@ -138,10 +138,10 @@ def mast3r_inference_mono(model, frame):
     """
     if frame.feat is None:
         frame.feat, frame.pos, _ = model._encode_image(frame.img, frame.img_true_shape)
-    print(f"frame.img: {frame.img.shape}")
-    print(f"frame.img_true_shape: {frame.img_true_shape}")
-    print(f"frame.feat: {frame.feat.shape}")
-    print(f"frame.pos: {frame.pos.shape}")
+    # print(f"frame.img: {frame.img.shape}")
+    # print(f"frame.img_true_shape: {frame.img_true_shape}")
+    # print(f"frame.feat: {frame.feat.shape}")
+    # print(f"frame.pos: {frame.pos.shape}")
     feat = frame.feat
     pos = frame.pos
     shape = frame.img_true_shape
@@ -249,10 +249,10 @@ def mast3r_asymmetric_inference(model, frame_i, frame_j):
 def mast3r_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     #获取点云图, 置信度, 描述符和描述符置信度
     X, C, D, Q = mast3r_asymmetric_inference(model, frame_i, frame_j)
-    print(f"X: {X.shape}")
-    print(f"C: {C.shape}")
-    print(f"D: {D.shape}")
-    print(f"Q: {Q.shape}")
+    # print(f"X: {X.shape}")
+    # print(f"C: {C.shape}")
+    # print(f"D: {D.shape}")
+    # print(f"Q: {Q.shape}")
     b, h, w = X.shape[:-1]
     # 2 outputs per inference
     b = b // 2
@@ -267,15 +267,15 @@ def mast3r_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     idx_i2j, valid_match_j = matching.match(
         Xii, Xji, Dii, Dji, idx_1_to_2_init=idx_i2j_init
     )
-    print(f"idx_i2j: {idx_i2j.shape}")
+    # print(f"idx_i2j: {idx_i2j.shape}")
 
     # How rest of system expects it
     Xii, Xji = einops.rearrange(X, "b h w c -> b (h w) c")
     Cii, Cji = einops.rearrange(C, "b h w -> b (h w) 1")
     Dii, Dji = einops.rearrange(D, "b h w c -> b (h w) c")
     Qii, Qji = einops.rearrange(Q, "b h w -> b (h w) 1")
-    print(f"Xii: {Xii.shape}")
-    print(f"Cii: {Cii.shape}")
+    # print(f"Xii: {Xii.shape}")
+    # print(f"Cii: {Cii.shape}")
 
     return idx_i2j, valid_match_j, Xii, Cii, Qii, Xji, Cji, Qji
 

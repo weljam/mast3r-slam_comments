@@ -138,7 +138,10 @@ def mast3r_inference_mono(model, frame):
     """
     if frame.feat is None:
         frame.feat, frame.pos, _ = model._encode_image(frame.img, frame.img_true_shape)
-
+    print(f"frame.img: {frame.img.shape}")
+    print(f"frame.img_true_shape: {frame.img_true_shape}")
+    print(f"frame.feat: {frame.feat.shape}")
+    print(f"frame.pos: {frame.pos.shape}")
     feat = frame.feat
     pos = frame.pos
     shape = frame.img_true_shape
@@ -260,6 +263,7 @@ def mast3r_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     Qii, Qji = Q[:b], Q[b:]
 
     # 返回匹配上的像素一维索引,以及匹配的有效性
+    # 这里的匹配已经包含了几何粗匹配以及基于特征的精匹配
     idx_i2j, valid_match_j = matching.match(
         Xii, Xji, Dii, Dji, idx_1_to_2_init=idx_i2j_init
     )

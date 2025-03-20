@@ -64,66 +64,66 @@ def get_impaths_from_imdir_or_imlistfile(input_imdir_or_imlistfile):
 
 class Retriever(object):
     def __init__(self, modelname, backbone=None, device='cuda'):
-        # load the model
-        assert os.path.isfile(modelname), modelname
-        print(f'Loading retrieval model from {modelname}')
-        ckpt = torch.load(modelname, 'cpu')  # TODO from pretrained to download it automatically
-        ckpt_args = ckpt['args']
+        # 加载模型
+        assert os.path.isfile(modelname), modelname  # 确认模型文件存在
+        print(f'Loading retrieval model from {modelname}')  # 打印加载模型信息
+        ckpt = torch.load(modelname, 'cpu')  # 从文件中加载模型检查点
+        ckpt_args = ckpt['args']  # 获取检查点中的参数
         if backbone is None:
-            backbone = AsymmetricMASt3R.from_pretrained(ckpt_args.pretrained)
+            backbone = AsymmetricMASt3R.from_pretrained(ckpt_args.pretrained)  # 如果没有提供backbone，则从预训练模型中加载
         self.model = RetrievalModel(
             backbone, freeze_backbone=ckpt_args.freeze_backbone, prewhiten=ckpt_args.prewhiten,
             hdims=list(map(int, ckpt_args.hdims.split('_'))) if len(ckpt_args.hdims) > 0 else "",
             residual=getattr(ckpt_args, 'residual', False), postwhiten=ckpt_args.postwhiten,
             featweights=ckpt_args.featweights, nfeat=ckpt_args.nfeat
-        ).to(device)
-        self.device = device
-        msg = self.model.load_state_dict(ckpt['model'], strict=False)
-        assert all(k.startswith('backbone') for k in msg.missing_keys)
-        assert len(msg.unexpected_keys) == 0
-        self.imsize = ckpt_args.imsize
+        ).to(device)  # 初始化检索模型
+        self.device = device  # 设置设备
+        msg = self.model.load_state_dict(ckpt['model'], strict=False)  # 加载模型状态字典
+        assert all(k.startswith('backbone') for k in msg.missing_keys)  # 确认所有缺失的键都以'backbone'开头
+        assert len(msg.unexpected_keys) == 0  # 确认没有意外的键
+        self.imsize = ckpt_args.imsize  # 设置图像大小
 
-        # load the asmk codebook
-        dname, bname = os.path.split(modelname)  # TODO they should both be in the same file ?
-        bname_splits = bname.split('_')
-        cache_codebook_fname = os.path.join(dname, '_'.join(bname_splits[:-1]) + '_codebook.pkl')
-        assert os.path.isfile(cache_codebook_fname), cache_codebook_fname
+        # 加载asmk码书
+        dname, bname = os.path.split(modelname)  # 获取模型文件的目录和文件名
+        bname_splits = bname.split('_')  # 分割文件名
+        cache_codebook_fname = os.path.join(dname, '_'.join(bname_splits[:-1]) + '_codebook.pkl')  # 构建码书缓存文件名
+        assert os.path.isfile(cache_codebook_fname), cache_codebook_fname  # 确认码书缓存文件存在
         asmk_params = {'index': {'gpu_id': 0}, 'train_codebook': {'codebook': {'size': '64k'}},
                        'build_ivf': {'kernel': {'binary': True}, 'ivf': {'use_idf': False},
                                      'quantize': {'multiple_assignment': 1}, 'aggregate': {}},
                        'query_ivf': {'quantize': {'multiple_assignment': 5}, 'aggregate': {},
                                      'search': {'topk': None},
-                                     'similarity': {'similarity_threshold': 0.0, 'alpha': 3.0}}}
-        asmk_params['train_codebook']['codebook']['size'] = ckpt_args.nclusters
-        self.asmk = asmk_method.ASMKMethod.initialize_untrained(asmk_params)
-        self.asmk = self.asmk.train_codebook(None, cache_path=cache_codebook_fname)
+                                     'similarity': {'similarity_threshold': 0.0, 'alpha': 3.0}}}  # 初始化asmk参数
+        asmk_params['train_codebook']['codebook']['size'] = ckpt_args.nclusters  # 设置码书大小
+        self.asmk = asmk_method.ASMKMethod.initialize_untrained(asmk_params)  # 初始化未训练的asmk方法
+        self.asmk = self.asmk.train_codebook(None, cache_path=cache_codebook_fname)  # 训练码书
 
     def __call__(self, input_imdir_or_imlistfile, outfile=None):
-        # get impaths
+        # 获取图像路径
         if isinstance(input_imdir_or_imlistfile, str):
-            impaths = get_impaths_from_imdir_or_imlistfile(input_imdir_or_imlistfile)
+            impaths = get_impaths_from_imdir_or_imlistfile(input_imdir_or_imlistfile)  # 从目录或文件中获取图像路径
         else:
-            impaths = input_imdir_or_imlistfile  # we're assuming a list has been passed
-        print(f'Found {len(impaths)} images')
+            impaths = input_imdir_or_imlistfile  # 假设传入的是一个列表
+        print(f'Found {len(impaths)} images')  # 打印找到的图像数量
 
-        # build the database
-        feat, ids = extract_local_features(self.model, impaths, self.imsize, tocpu=True, device=self.device)
-        feat = feat.cpu().numpy()
-        ids = ids.cpu().numpy()
-        asmk_dataset = self.asmk.build_ivf(feat, ids)
+        # 构建数据库
+        feat, ids = extract_local_features(self.model, impaths, self.imsize, tocpu=True, device=self.device)  # 提取局部特征
+        feat = feat.cpu().numpy()  # 将特征转换为numpy数组
+        ids = ids.cpu().numpy()  # 将ID转换为numpy数组
+        asmk_dataset = self.asmk.build_ivf(feat, ids)  # 构建IVF数据库
 
-        # we actually retrieve the same set of images
-        metadata, query_ids, ranks, ranked_scores = asmk_dataset.query_ivf(feat, ids)
+        # 实际上我们检索的是同一组图像
+        metadata, query_ids, ranks, ranked_scores = asmk_dataset.query_ivf(feat, ids)  # 查询IVF数据库
 
-        # well ... scores are actually reordered according to ranks ...
-        # so we redo it the other way around...
-        scores = np.empty_like(ranked_scores)
-        scores[np.arange(ranked_scores.shape[0])[:, None], ranks] = ranked_scores
+        # 分数实际上是根据排名重新排序的...
+        # 所以我们反过来重新做...
+        scores = np.empty_like(ranked_scores)  # 创建一个空的分数数组
+        scores[np.arange(ranked_scores.shape[0])[:, None], ranks] = ranked_scores  # 根据排名重新排序分数
 
-        # save
+        # 保存
         if outfile is not None:
             if os.path.isdir(os.path.dirname(outfile)):
-                os.makedirs(os.path.dirname(outfile), exist_ok=True)
-            np.save(outfile, scores)
-            print(f'Scores matrix saved in {outfile}')
-        return scores
+                os.makedirs(os.path.dirname(outfile), exist_ok=True)  # 创建输出目录
+            np.save(outfile, scores)  # 保存分数矩阵
+            print(f'Scores matrix saved in {outfile}')  # 打印保存信息
+        return scores  # 返回分数

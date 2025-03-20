@@ -55,13 +55,17 @@ def projection_matrix(w, h, vfov, cx, cy, znear, zfar):
 
 
 def lookat(eye, obj, up):
+    # 计算视线方向向量
     f = (obj - eye).astype(np.float32)
     f /= np.linalg.norm(f)
+    # 计算右方向向量
     up = up.astype(np.float32)
     s = np.cross(f, up)
     s /= np.linalg.norm(s)
+    # 计算上方向向量
     u = np.cross(s, f)
     u /= np.linalg.norm(u)
+    # 构建LookAt矩阵
     M = np.eye(4, dtype=np.float32)
     M[:3, :3] = np.array([s, u, -f])
     M[:3, 3] = -M[:3, :3] @ eye
@@ -120,21 +124,22 @@ def create_camera_vertices(near, far, fov, aspect_ratio, color=None):
 
 class ProjectionMatrix:
     def __init__(self, w, h, vfov, cx, cy, znear, zfar):
-        self.w = w
-        self.h = h
-        self.hfov = vfov
-        self.cx = cx
-        self.cy = cy
-        self.znear = znear
-        self.zfar = zfar
+        self.w = w  # 宽度
+        self.h = h  # 高度
+        self.hfov = vfov  # 垂直视场角
+        self.cx = cx  # 中心点x坐标
+        self.cy = cy  # 中心点y坐标
+        self.znear = znear  # 近裁剪面
+        self.zfar = zfar  # 远裁剪面
         self.cv2gl = np.array(
             [[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]], dtype=np.float32
-        )
-        self.matrix = projection_matrix(w, h, vfov, cx, cy, znear, zfar)
+        )  # 从OpenCV坐标系到OpenGL坐标系的转换矩阵
+        self.matrix = projection_matrix(w, h, vfov, cx, cy, znear, zfar)  # 透视投影矩阵
 
     def update(
         self, w=None, h=None, hfov=None, cx=None, cy=None, znear=None, zfar=None
     ):
+        # 更新投影矩阵的参数，如果参数为None则保持原值
         self.w = w or self.w
         self.h = h or self.h
         self.hfov = hfov or self.hfov
@@ -143,11 +148,13 @@ class ProjectionMatrix:
         self.znear = znear or self.znear
         self.zfar = zfar or self.zfar
 
+        # 重新计算投影矩阵
         self.matrix = projection_matrix(
             self.w, self.h, self.hfov, self.cx, self.cy, self.znear, self.zfar
         )
 
     def gl_matrix(self):
+        # 返回转置后的投影矩阵
         return self.matrix.T.copy()
 
 
@@ -176,7 +183,7 @@ class Camera:
         viewport = wnd.ctx.screen.viewport
 
         x, y = imgui.get_io().mouse_pos
-        # set origin to bottom-left
+        # 将原点设置为左下角
         x, y = int(x), int(wnd.size[1] - y)
         left, right = (
             imgui.get_io().mouse_down[0],
@@ -199,7 +206,7 @@ class Camera:
         if not imgui.get_io().want_capture_mouse:
             if abs(scroll) > 0.1:
                 self.zoom(scroll, x, y, viewport, pix_ratio)
-            # only trigger after the initial left/right down so we can set the correct last/drag-start points.
+            # 仅在初始左/右键按下后触发，以便我们可以设置正确的最后/拖动起始点。
             if self.mouse_left_down:
                 self.pan(x, y, viewport, pix_ratio)
             if self.mouse_right_down:
@@ -282,7 +289,7 @@ class Camera:
             axis = np.array([-dy, dx, 0], dtype=np.float32)
             axis = axis / np.linalg.norm(axis)
             angle = np.linalg.norm(np.array([dx / viewport[2], dy / viewport[3]])) * 5.0
-            # make into 4x4
+            # 转换为4x4矩阵
             R = np.eye(4, dtype=np.float32)
             R[:3, :3] = exp_angle_axis(angle, axis)
             R = translation_matrix(pivot) @ R @ translation_matrix(-pivot)
@@ -384,9 +391,12 @@ class CameraHandler:
             self.T_CW = R @ view_mat
 
     def follow_cam(self, T_CW):
+        # 如果当前没有在跟随模式下，将相机变换矩阵设为单位矩阵
         if not self.is_following:
             self.T_CW = np.eye(4, dtype=np.float32)
+        # 设置跟随模式为True
         self.is_following = True
+        # 将传入的变换矩阵重塑为4x4矩阵并赋值给follow_T_CW
         self.follow_T_CW = T_CW.reshape(4, 4)
 
     def unfollow_cam(self):

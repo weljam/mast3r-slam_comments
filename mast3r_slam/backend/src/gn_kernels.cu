@@ -1136,7 +1136,25 @@ __global__ void ray_align_kernel(
     }
   }
 }
-
+/**
+ * @brief 高斯-牛顿优化算法，用于优化相机位姿和点云数据
+ * 
+ * @param Twc 相机位姿张量，形状为 (num_poses, 7)，表示在世界坐标系下的相机位姿（Sim3变换，7DoF）
+ * @param Xs 点云张量，形状为 (num_poses, n, 3)，n 是点的数量，每个点表示在相机坐标系下的三维坐标
+ * @param Cs 点云置信度张量，形状为 (num_poses, n, 1)
+ * @param ii 边的索引张量，形状为 (num_edges)，表示连接两个关键帧的边的起始关键帧索引
+ * @param jj 边的索引张量，形状为 (num_edges)，表示连接两个关键帧的边的结束关键帧索引
+ * @param idx_ii2jj 索引张量，用于从 ii 到 jj 的索引映射，形状为 (num_edges, n)
+ * @param valid_match 匹配有效性张量，形状为 (num_poses, n, num_poses)，表示点的匹配是否有效
+ * @param Q 匹配质量张量，形状为 (num_poses, n, num_poses)
+ * @param sigma_ray 光线测量的标准差，用于加权残差
+ * @param sigma_dist 距离测量的标准差，用于加权残差
+ * @param C_thresh 置信度阈值，用于过滤无效匹配
+ * @param Q_thresh 匹配质量阈值，用于过滤无效匹配
+ * @param max_iter 最大迭代次数
+ * @param delta_thresh 收敛阈值，当更新量的范数小于该阈值时停止迭代
+ * @return std::vector<torch::Tensor> 优化后的张量列表
+ */
 std::vector<torch::Tensor> gauss_newton_rays_cuda(
   torch::Tensor Twc, torch::Tensor Xs, torch::Tensor Cs,
   torch::Tensor ii, torch::Tensor jj, 
@@ -1149,37 +1167,42 @@ std::vector<torch::Tensor> gauss_newton_rays_cuda(
   const int max_iter,
   const float delta_thresh)
 {
+  // 获取Twc张量的选项，用于创建其他同类型的张量
   auto opts = Twc.options();
+  // 边的数量
   const int num_edges = ii.size(0);
+  // 位姿的数量
   const int num_poses = Xs.size(0);
+  //每个位姿下点的数量
   const int n = Xs.size(1);
 
   const int num_fix = 1;
 
-  // Setup indexing
+  // 设置索引
   torch::Tensor unique_kf_idx = get_unique_kf_idx(ii, jj);
-  // For edge construction
+  // 用于边构造
   std::vector<torch::Tensor> inds = create_inds(unique_kf_idx, 0, ii, jj);
   torch::Tensor ii_edge = inds[0];
   torch::Tensor jj_edge = inds[1];
-  // For linear system indexing (pin=2 because fixing first two poses)
+  // 用于线性系统索引（pin=2，因为固定前两个姿态）
   std::vector<torch::Tensor> inds_opt = create_inds(unique_kf_idx, num_fix, ii, jj);
   torch::Tensor ii_opt = inds_opt[0];
   torch::Tensor jj_opt = inds_opt[1];
 
   const int pose_dim = 7; // sim3
 
-  // initialize buffers
+  // 初始化缓冲区
   torch::Tensor Hs = torch::zeros({4, num_edges, pose_dim, pose_dim}, opts);
   torch::Tensor gs = torch::zeros({2, num_edges, pose_dim}, opts);
 
-  // For debugging outputs
+  // 用于调试输出
   torch::Tensor dx;
 
   torch::Tensor delta_norm;
 
   for (int itr=0; itr<max_iter; itr++) {
 
+    // 调用 CUDA 核函数进行射线对齐
     ray_align_kernel<<<num_edges, THREADS>>>(
       Twc.packed_accessor32<float,2,torch::RestrictPtrTraits>(),
       Xs.packed_accessor32<float,3,torch::RestrictPtrTraits>(),
@@ -1194,37 +1217,38 @@ std::vector<torch::Tensor> gauss_newton_rays_cuda(
       sigma_ray, sigma_dist, C_thresh, Q_thresh
     );
 
-
-    // pose x pose block
+    // 姿态 x 姿态块
     SparseBlock A(num_poses - num_fix, pose_dim);
 
+    // 更新左手边矩阵
     A.update_lhs(Hs.reshape({-1, pose_dim, pose_dim}), 
         torch::cat({ii_opt, ii_opt, jj_opt, jj_opt}), 
         torch::cat({ii_opt, jj_opt, ii_opt, jj_opt}));
 
+    // 更新右手边向量
     A.update_rhs(gs.reshape({-1, pose_dim}), 
         torch::cat({ii_opt, jj_opt}));
 
-    // NOTE: Accounting for negative here!
+    // 注意：这里考虑负号！
     dx = -A.solve();
 
-    //
+    // 更新姿态
     pose_retr_kernel<<<1, THREADS>>>(
       Twc.packed_accessor32<float,2,torch::RestrictPtrTraits>(),
       dx.packed_accessor32<float,2,torch::RestrictPtrTraits>(),
       num_fix);
 
-    // Termination criteria
-    // Need to specify this second argument otherwise ambiguous function call...
+    // 终止条件
+    // 需要指定第二个参数，否则函数调用不明确...
     delta_norm = torch::linalg::linalg_norm(dx, std::optional<c10::Scalar>(), {}, false, {});
     if (delta_norm.item<float>() < delta_thresh) {
       break;
     }
-        
+
 
   }
 
-  return {dx}; // For debugging
+  return {dx}; // 用于调试
 }
 
 

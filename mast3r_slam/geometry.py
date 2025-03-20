@@ -10,6 +10,7 @@ def skew_sym(x):
 
 # 计算点到原点的距离
 def point_to_dist(X):
+    #沿着最后一个维度计算范数,并保持维度
     d = torch.linalg.norm(X, dim=-1, keepdim=True)
     return d
 
@@ -22,7 +23,7 @@ def point_to_ray_dist(X, jacobian=False):
     d = point_to_dist(X)
     d_inv = 1.0 / d
     r = d_inv * X #归一化
-    rd = torch.cat((r, d), dim=-1)  # 维度4
+    rd = torch.cat((r, d), dim=-1)  # 维度4,dim=-1,在最后一个维度上拼接
     if not jacobian:
         return rd
     else:
@@ -50,7 +51,7 @@ def act_Sim3(X: lietorch.Sim3, pC: torch.Tensor, jacobian=False):
     pW = X.act(pC)
     if not jacobian:
         return pW
-    # 计算雅可比矩阵  dpW/dX = [dpW/dt, dpW/dR, dpW/ds] = [0,]
+    # 计算雅可比矩阵  
     dpC_dt = torch.eye(3, device=pW.device).repeat(*pW.shape[:-1], 1, 1)
     dpC_dR = -skew_sym(pW)
     dpc_ds = pW.reshape(*pW.shape[:-1], -1, 1)

@@ -179,7 +179,7 @@ class SharedStates:
         # 当前帧的共享状态（用于重定位/可视化）
         self.dataset_idx = torch.zeros(1, device=device, dtype=torch.int).share_memory_()  # 数据集索引
         self.img = torch.zeros(3, h, w, device=device, dtype=dtype).share_memory_()  # 图像
-        self.uimg = torch.zeros(h, w, 3, device="cpu", dtype=dtype).share_memory_()  # 未归一化的图像
+        self.uimg = torch.zeros(h, w, 3, device="cpu", dtype=dtype).share_memory_()  # 归一化的图像
         self.img_shape = torch.zeros(1, 2, device=device, dtype=torch.int).share_memory_()  # 图像形状
         self.img_true_shape = torch.zeros(1, 2, device=device, dtype=torch.int).share_memory_()  # 图像真实形状
         self.T_WC = lietorch.Sim3.Identity(1, device=device, dtype=dtype).data.share_memory_()  # 世界到相机的变换矩阵
@@ -294,7 +294,7 @@ class SharedKeyframes:
         self.K = torch.zeros(3, 3, device=device, dtype=dtype).share_memory_()  # 内参矩阵
         # fmt: on
 
-    def __getitem__(self, idx) -> Frame:
+    def __getitem__(self, idx) -> Frame:  #可以使用下标访问
         with self.lock:
             # 将所有数据放入一个帧中
             kf = Frame(
@@ -315,7 +315,7 @@ class SharedKeyframes:
                 kf.K = self.K
             return kf
 
-    def __setitem__(self, idx, value: Frame) -> None:
+    def __setitem__(self, idx, value: Frame) -> None: #可以使用下标赋值
         with self.lock:
             self.n_size.value = max(idx + 1, self.n_size.value)
 

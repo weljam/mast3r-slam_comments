@@ -18,7 +18,7 @@ class MonocularDataset(torch.utils.data.Dataset):
         self.dtype = dtype
         self.rgb_files = []  # 存储RGB文件路径的列表
         self.timestamps = []  # 存储时间戳的列表
-        self.img_size = 512  # 图像大小
+        self.img_size = 224  # 图像大小512,可以降低为224,减小显存,但是会影响精度
         self.camera_intrinsics = None  # 相机内参
         self.use_calibration = config["use_calib"]  # 是否使用校准
         self.save_results = True  # 是否保存结果
@@ -27,7 +27,13 @@ class MonocularDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.rgb_files)  # 返回RGB文件的数量
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx): #通过[]调用
+        """
+        返回
+        1. 时间戳
+        2. 图像(归一化后)
+        3. 图像名字
+        """
         # 在获取时间戳之前调用get_image
         img = self.get_image(idx)
         timestamp = self.get_timestamp(idx)
@@ -41,7 +47,10 @@ class MonocularDataset(torch.utils.data.Dataset):
         img = cv2.imread(self.rgb_files[idx])  # 读取图像
         return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # 转换颜色空间
 
-    def get_image(self, idx):
+    def get_image(self, idx): 
+        """
+         返回归一化后的图像
+        """
         img = self.read_img(idx)  # 读取图像
         if self.use_calibration:
             img = self.camera_intrinsics.remap(img)  # 如果使用校准，进行重映射
@@ -246,11 +255,14 @@ class RGBFiles(MonocularDataset):
     def __init__(self, dataset_path):
         super().__init__()
         self.use_calibration = False
-        self.save_results = False
-
         self.dataset_path = pathlib.Path(dataset_path)
-        self.rgb_files = natsorted(list((self.dataset_path).glob("*.png")))
-        #self.timestamps = np.arange(0, len(self.rgb_files)).astype(self.dtype) / 30.0
+        # self.rgb_files = natsorted(list((self.dataset_path).glob("*.png")))
+        # 同时匹配 .jpg、.jpeg 和 .png 格式的文件
+        self.rgb_files = []
+        for ext in ('*.jpg', '*.jpeg', '*.png'):
+            self.rgb_files.extend(natsorted(list(self.dataset_path.glob(ext))))
+        print(f"Loaded {len(self.rgb_files)} RGB files from {dataset_path}")
+        # self.timestamps = np.arange(0, len(self.rgb_files)).astype(self.dtype) / 30.0
         self.timestamps = np.arange(0, len(self.rgb_files)).astype(self.dtype) / 5.0
 
 
